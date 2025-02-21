@@ -1,0 +1,11 @@
+*.o
+*.out
+*.d
+_*
+fs.img
+kernel.elf
+initcode
+initcode_c_arr.h
+mkfs
+.cache/
+compile_commands.json
