@@ -150,7 +150,7 @@ void proc_dump(void)
 {
 	struct process *p;
 	char *state;
-	printk("\nPID    STATE    NAME\n");
+	printk("\n");
 	for (p = FIRST_PROC; p <= LAST_PROC; p++) {
 		if (p->state == PROC_UNUSED)
 			continue;
@@ -174,7 +174,7 @@ void proc_dump(void)
 			state = "???     ";
 			break;
 		}
-		printk("%-6d %s %s\n", p->pid, state, p->name);
+		printk("%s %d %s\n", state, p->pid, p->name);
 	}
 }
 

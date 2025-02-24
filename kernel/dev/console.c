@@ -39,6 +39,13 @@ void console_putc(int c)
 	}
 }
 
+void console_puts(const char *str, size_t len)
+{
+	size_t i;
+	for (i = 0; i < len; i++)
+		console_putc(str[i]);
+}
+
 void console_intr(int c)
 {
 	spin_lock_acquire(&cons.lock);
