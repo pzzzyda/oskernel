@@ -11,247 +11,135 @@ void _start()
 
 /* printf flags */
 #define PF_SIGNED (1 << 0)
-#define PF_PADDING (1 << 1)
-#define PF_ACCURACY (1 << 2)
-#define PF_ALIGN (1 << 3)
-#define PF_ZERO_PADDING (1 << 4)
 #define PF_LONG (1 << 5)
-#define PF_UPPER (1 << 6)
-#define PF_POINTER (1 << 7)
 #define PF_LONG_LONG (1 << 8)
 
-static const char digits_l[] = "0123456789abcdef";
-static const char digits_u[] = "0123456789ABCDEF";
+static const char digits[] = "0123456789abcdef";
 
-static void dprint_int(int fd, long long x, int base, int left, int right,
-		       int flag)
+static void dprint_str(int fd, const char *str)
 {
-	char buf[70];
-	const char *digits;
-	int pos, len;
-	bool is_negative;
-	char padding_char;
-
-	is_negative = (flag & PF_SIGNED) && (int64_t)x < 0;
-
-	if (flag & PF_UPPER)
-		digits = digits_u;
+	if (!str)
+		write(fd, "(null)", 6);
 	else
-		digits = digits_l;
-
-	pos = sizeof(buf);
-	do {
-		--pos;
-		buf[pos] = digits[x % base];
-		x /= base;
-	} while (x);
-	len = sizeof(buf) - pos;
-
-	if (flag & PF_POINTER) {
-		--pos;
-		buf[pos] = 'x';
-		--pos;
-		buf[pos] = '0';
-		len += 2;
-	}
-
-	if ((flag & PF_ACCURACY) && !(flag & PF_POINTER) && (len < right)) {
-		while (len < right) {
-			--pos;
-			buf[pos] = '0';
-			++len;
-		}
-	}
-
-	if (is_negative) {
-		--pos;
-		buf[pos] = '-';
-		++len;
-	}
-
-	if (flag & PF_ALIGN) {
-		write(fd, buf + pos, len);
-		while (len < left) {
-			write(fd, " ", 1);
-			++len;
-		}
-		return;
-	}
-
-	if (flag & PF_PADDING) {
-		if ((flag & PF_ZERO_PADDING) && !(flag & PF_POINTER))
-			padding_char = '0';
-		else
-			padding_char = ' ';
-		while (len < left) {
-			--pos;
-			buf[pos] = padding_char;
-			++len;
-		}
-	}
-
-	write(fd, buf + pos, len);
+		write(fd, str, strlen(str));
 }
 
-int vdprintf(int fd, const char *fmt, va_list args)
+static void dprint_ptr(int fd, unsigned long long x)
 {
-	int i, j, k;
-	long long x;
-	char c, *s;
-	bool parsing;
-	int flag, left, right;
+	char buf[32];
+	size_t pos = sizeof(buf);
+	do {
+		buf[--pos] = digits[x % 16];
+		x /= 16;
+	} while (x > 0);
+	write(fd, "0x", 2);
+	write(fd, buf + pos, sizeof(buf) - pos);
+}
 
-	parsing = false;
-	flag = 0;
-	left = 0;
-	right = 0;
-	k = 0;
-	for (i = 0; fmt[i]; i++) {
-		c = fmt[i];
-
-		if (!parsing) {
-			if (c == '%') {
-				parsing = true;
-				k = i;
-				/* check '-' */
-				if (fmt[i + 1] == '-') {
-					i++;
-					flag |= PF_ALIGN;
-				}
-			} else {
-				write(fd, &c, 1);
-			}
-			continue;
+static void dprint_int(int fd, unsigned long long x, unsigned int base,
+		       int flag)
+{
+	char buf[32];
+	size_t pos;
+	bool is_negative;
+	if (flag & PF_SIGNED) {
+		if ((long long)x < 0) {
+			is_negative = true;
+			x = (-(long long)x);
+		} else {
+			is_negative = false;
 		}
-
-		switch (c) {
-		case 'i':
-		case 'd':
-			if (flag & PF_LONG_LONG)
-				x = va_arg(args, long long);
-			else if (flag & PF_LONG)
-				x = va_arg(args, long);
-			else
-				x = va_arg(args, int);
-			flag |= PF_SIGNED;
-			dprint_int(fd, x, 10, left, right, flag);
-			break;
-		case 'u':
-			if (flag & PF_LONG_LONG)
-				x = va_arg(args, long long);
-			else if (flag & PF_LONG)
-				x = va_arg(args, long);
-			else
-				x = va_arg(args, int);
-			dprint_int(fd, x, 10, left, right, flag);
-			break;
-		case 'o':
-			if (flag & PF_LONG_LONG)
-				x = va_arg(args, long long);
-			else if (flag & PF_LONG)
-				x = va_arg(args, long);
-			else
-				x = va_arg(args, int);
-			dprint_int(fd, x, 8, left, right, flag);
-			break;
-		case 'b':
-			if (flag & PF_LONG_LONG)
-				x = va_arg(args, long long);
-			else if (flag & PF_LONG)
-				x = va_arg(args, long);
-			else
-				x = va_arg(args, int);
-			dprint_int(fd, x, 2, left, right, flag);
-			break;
-		case 'p':
-			flag |= PF_LONG;
-			flag |= PF_POINTER;
-		case 'x':
-			if (flag & PF_LONG_LONG)
-				x = va_arg(args, long long);
-			else if (flag & PF_LONG)
-				x = va_arg(args, long);
-			else
-				x = va_arg(args, int);
-			dprint_int(fd, x, 16, left, right, flag);
-			break;
-		case 'X':
-			if (flag & PF_LONG_LONG)
-				x = va_arg(args, long long);
-			else if (flag & PF_LONG)
-				x = va_arg(args, long);
-			else
-				x = va_arg(args, int);
-			flag |= PF_UPPER;
-			dprint_int(fd, x, 16, left, right, flag);
-			break;
-		case 's':
-			s = va_arg(args, char *);
-			if (!s) {
-				write(fd, "null", 4);
-			} else {
-				if (flag & PF_ACCURACY) {
-					for (j = 0; j < right; j++) {
-						if (s[j])
-							write(fd, s + j, 1);
-						else
-							write(fd, " ", 1);
-					}
-				} else {
-					write(fd, s, strlen(s));
-				}
-			}
-			break;
-		case 'c':
-			c = va_arg(args, int);
-			write(fd, &c, 1);
-			break;
-		case 'l':
-			if ((flag & PF_LONG) == 0)
-				flag |= PF_LONG;
-			else
-				flag |= PF_LONG_LONG;
-			continue;
-		case '.':
-			flag |= PF_ACCURACY;
-			continue;
-		case '-':
-			/* ignore */
-			continue;
-		case '0':
-			if (left == 0) {
-				flag |= PF_ZERO_PADDING;
-				/* skip the other '0's after the first '0' */
-				while (fmt[i + 1] == '0')
-					i++;
-				continue;
-			}
-		case '1':
-		case '2':
-		case '3':
-		case '4':
-		case '5':
-		case '6':
-		case '7':
-		case '8':
-		case '9':
-			flag |= PF_PADDING;
-			if (flag & PF_ACCURACY)
-				right = right * 10 + c - '0';
-			else
-				left = left * 10 + c - '0';
-			continue;
-		default:
-			write(fd, fmt + k, i - k + 1);
-			break;
-		}
-		parsing = false;
-		flag = 0;
-		left = 0;
-		right = 0;
-		k = 0;
+	} else {
+		is_negative = false;
 	}
+	pos = sizeof(buf);
+	do {
+		buf[--pos] = digits[x % base];
+		x /= base;
+	} while (x > 0);
+	if (is_negative)
+		write(fd, "-", 1);
+	write(fd, buf + pos, sizeof(buf) - pos);
+}
 
+static int vdprintf(int fd, const char *fmt, va_list args)
+{
+	int i, j;
+	char c;
+	unsigned long long x;
+	bool is_valid;
+	int flag;
+	for (i = 0; fmt[i]; i++) {
+		if (fmt[i] != '%') {
+			write(fd, fmt + i, 1);
+			continue;
+		}
+		is_valid = false;
+		flag = 0;
+		for (j = i + 1; fmt[j]; j++) {
+			c = fmt[j];
+			switch (c) {
+			case 'd':
+			case 'u':
+			case 'x':
+				if (c == 'd') {
+					flag |= PF_SIGNED;
+					if (flag & PF_LONG_LONG)
+						x = va_arg(args, long long);
+					else if (flag & PF_LONG)
+						x = va_arg(args, long);
+					else
+						x = va_arg(args, int);
+				} else {
+					if (flag & PF_LONG_LONG)
+						x = va_arg(args,
+							   unsigned long long);
+					else if (flag & PF_LONG)
+						x = va_arg(args, unsigned long);
+					else
+						x = va_arg(args, unsigned int);
+				}
+				if (c == 'd' || c == 'u')
+					dprint_int(fd, x, 10, flag);
+				else
+					dprint_int(fd, x, 16, flag);
+				is_valid = true;
+				goto end;
+			case 'p':
+				x = (unsigned long long)va_arg(args, void *);
+				dprint_ptr(fd, x);
+				is_valid = true;
+				goto end;
+			case 's':
+				dprint_str(fd, va_arg(args, const char *));
+				is_valid = true;
+				goto end;
+			case 'c':
+				c = va_arg(args, int);
+				write(fd, &c, 1);
+				is_valid = true;
+				goto end;
+			case '%':
+				write(fd, "%", 1);
+				is_valid = true;
+				goto end;
+			case 'l':
+				if (!(flag & PF_LONG))
+					flag |= PF_LONG;
+				else
+					flag |= PF_LONG_LONG;
+				continue;
+			default:
+				goto end;
+			}
+		}
+
+	end:
+		if (!is_valid)
+			write(fd, "%", 1);
+		else
+			i = j;
+	}
 	return i;
 }
 
