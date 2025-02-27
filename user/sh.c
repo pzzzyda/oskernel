@@ -285,8 +285,9 @@ struct token *get_token(char **input)
 		}
 	default:
 		tok = token_new(TOK_ARG, i, 1);
-		while (*i && !strchr(WHITESPACE, *i) && !strchr("2|<>", *i))
-			i++;
+		do {
+			++i;
+		} while (*i && !strchr(WHITESPACE, *i) && !strchr("2|<>", *i));
 		tok->len = i - tok->lexeme;
 		break;
 	}
